@@ -1,28 +1,45 @@
-name: update-exchange-rates
+name: Run script and commit output
+
 on:
-  push:
+  schedule:
+    - cron: '40 15 * * 1-5'
+  workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
-  update:
+  run-and-commit:
     runs-on: ubuntu-latest
+    concurrency:
+      group: run-and-commit-cron
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           persist-credentials: true
-      - uses: actions/setup-python@v4
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
-      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - run: python runx.py
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add x || true
-          if git diff --cached --quiet; then
-            echo "no changes to commit"
-          else
-            git commit -m "Update x.csv"
-            git push
-          fi
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run script
+        run: python runx.py
+
+      - name: Commit and push output file
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: github-actions
+          author_email: github-actions@github.com
+          message: 'chore: add ghOut1 auto-generated'
+          add: 'x'
+          push: true
 
