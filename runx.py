@@ -2,71 +2,60 @@ import requests
 import csv
 import time
 import random
-from datetime import date
+from datetime import datetime
 
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/118.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/109.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/109.0",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/109.0",
+    "Mozilla/5.0 (iPad; CPU OS 16_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/109.0.5414.112 Mobile/15E148 Safari/604.1",
 ]
-
 TARGET_CURRENCIES = ['GBP', 'EUR', 'CAD', 'CHF']
-API_URL = "https://api.frankfurter.app/latest"
-OUTPUT_FILE = "x.csv"
+BASE_CURRENCY = 'USD'
+API_URL = f"https://api.frankfurter.app/latest?from={BASE_CURRENCY}&to={','.join(TARGET_CURRENCIES)}"
+OUTPUT_FILE = 'x.csv'
+MAX_RETRIES = 4
 
-def fetch_exchange_rates():
-    params = {
-        'from': 'USD',
-        'to': ",".join(TARGET_CURRENCIES)
-    }
-    
-    response = None
-    for attempt in range(4):
-        pause_duration = random.uniform(2 * attempt + 2, 2 * attempt + 2.5)
-        time.sleep(pause_duration)
-        
-        try:
-            with requests.Session() as s:
-                headers = {'User-Agent': random.choice(USER_AGENTS)}
-                s.headers.update(headers)
-                response = s.get(API_URL, params=params, timeout=10)
-            
-            if response.status_code == 200:
-                return response.json()
-        except requests.RequestException:
-            continue
-            
-    if response is not None:
-        raise ConnectionError(f"Failed to fetch data after 4 attempts. Last status code: {response.status_code}")
-    else:
-        raise ConnectionError("Failed to fetch data after 4 attempts. No response received.")
+rates = None
+session = requests.Session()
 
-def write_to_csv(data):
-    today = date.today().isoformat()
-    fieldnames = ['x', 'r', 'd']
-    
-    with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        
-        rates = data.get('rates', {})
-        for currency in TARGET_CURRENCIES:
-            rate = rates.get(currency, "")
-            writer.writerow({'x': currency, 'r': rate, 'd': today})
-
-if __name__ == "__main__":
+for attempt in range(MAX_RETRIES):
     try:
-        rate_data = fetch_exchange_rates()
-        write_to_csv(rate_data)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        exit(1)
+        pause_base = 2 * attempt
+        sleep_duration = random.uniform(2 + pause_base, 2.5 + pause_base)
+        time.sleep(sleep_duration)
+        headers = {'User-Agent': random.choice(USER_AGENTS)}
+        response = session.get(API_URL, headers=headers, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        rates = data.get('rates', {})
+        break
+    except requests.exceptions.RequestException:
+        if attempt == MAX_RETRIES - 1:
+            rates = {}
+
+if rates is None:
+    rates = {}
+
+run_date = datetime.now().strftime('%d-%b')
+rows_to_write = []
+for currency in TARGET_CURRENCIES:
+    rate_value = rates.get(currency, "")
+    rows_to_write.append({
+        'x': f"{BASE_CURRENCY} to {currency}",
+        'r': rate_value,
+        'd': run_date
+    })
+
+with open(OUTPUT_FILE, 'w', newline='', encoding='utf-8') as csv_file:
+    writer = csv.DictWriter(csv_file, fieldnames=['x', 'r', 'd'])
+    writer.writeheader()
+    writer.writerows(rows_to_write)
