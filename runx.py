@@ -21,7 +21,7 @@ USER_AGENTS = [
 TARGET_CURRENCIES = ['GBP', 'EUR', 'CAD', 'CHF']
 BASE_CURRENCY = 'USD'
 API_URL = f"https://api.frankfurter.app/latest?from={BASE_CURRENCY}&to={','.join(TARGET_CURRENCIES)}"
-OUTPUT_FILE = 'x.csv'
+OUTPUT_FILE = 'x'
 MAX_RETRIES = 4
 
 rates = None
@@ -50,7 +50,7 @@ rows_to_write = []
 for currency in TARGET_CURRENCIES:
     rate_value = rates.get(currency, "")
     rows_to_write.append({
-        'x': f"{BASE_CURRENCY} to {currency}",
+        'x': currency,
         'r': rate_value,
         'd': run_date
     })
