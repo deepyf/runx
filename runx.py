@@ -20,13 +20,13 @@ USER_AGENTS = [
 ]
 
 TARGET_CURRENCIES = ['GBP', 'EUR', 'CAD', 'CHF']
-API_URL = "https://api.exchangerate.host/latest"
+API_URL = "https://api.frankfurter.app/latest"
 OUTPUT_FILE = "x.csv"
 
 def fetch_exchange_rates():
     params = {
-        'base': 'USD',
-        'symbols': ",".join(TARGET_CURRENCIES)
+        'from': 'USD',
+        'to': ",".join(TARGET_CURRENCIES)
     }
     
     response = None
