@@ -1,1 +1,27 @@
+name: update-exchange-rates
+on:
+  push:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - run: python runx.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git.config_email="41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "$git.config_email"
+          git add x.csv || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Update x.csv"
+            git push
+          fi
 
