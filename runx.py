@@ -32,7 +32,6 @@ API_URL = "https://api.exchangerate.host/latest"
 symbols = ",".join(RATE_MAP.values())
 
 session = requests.Session()
-
 sleep_ranges = [(2, 2.5), (4, 4.5), (6, 6.5), (8, 8.5)]
 max_attempts = len(sleep_ranges)
 response_json = None
@@ -44,31 +43,55 @@ for attempt in range(max_attempts):
     time.sleep(random.uniform(rng[0], rng[1]))
     try:
         resp = session.get(API_URL, params={"base": "USD", "symbols": symbols}, timeout=15)
-        if resp.status_code == 200:
-            response_json = resp.json()
-            if isinstance(response_json, dict) and "rates" in response_json:
+    except requests.RequestException as e:
+        print(f"attempt {attempt+1}/{max_attempts} request exception: {e}", file=sys.stderr)
+        resp = None
+    if resp is not None:
+        status = resp.status_code
+        if status == 200:
+            try:
+                j = resp.json()
+            except ValueError:
+                print(f"attempt {attempt+1}/{max_attempts} invalid json", file=sys.stderr)
+                j = None
+            if isinstance(j, dict) and "rates" in j:
+                response_json = j
                 break
-    except requests.RequestException:
-        pass
+            else:
+                print(f"attempt {attempt+1}/{max_attempts} missing 'rates' key or bad payload", file=sys.stderr)
+        else:
+            body_snippet = resp.text[:200].replace("\n", " ")
+            print(f"attempt {attempt+1}/{max_attempts} http {status} body {body_snippet}", file=sys.stderr)
 
-if not response_json or "rates" not in response_json:
-    sys.exit(1)
+rates = {}
+if response_json and isinstance(response_json.get("rates"), dict):
+    rates = response_json.get("rates", {})
+else:
+    print("no valid rates fetched; proceeding to write empty values", file=sys.stderr)
 
-rates = response_json.get("rates", {})
 today = datetime.date.today().isoformat()
+
 rows = []
 for name, code in RATE_MAP.items():
     val = rates.get(code, "")
     if val is None:
-        val = ""
-    rows.append({"x": name, "r": (str(val) if val != "" else ""), "d": today})
+        val_out = ""
+    else:
+        val_out = str(val)
+    rows.append({"x": name, "r": (val_out if val_out != "" else ""), "d": today})
 
-out_path = os.path.join(os.getcwd(), "x")
-with open(out_path, "w", newline="", encoding="utf-8") as f:
-    writer = csv.DictWriter(f, fieldnames=["x", "r", "d"])
-    writer.writeheader()
-    for row in rows:
-        writer.writerow(row)
+out_path = os.path.join(os.getcwd(), "x.csv")
+try:
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["x", "r", "d"])
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    print(f"wrote {out_path}")
+except Exception as e:
+    print(f"failed to write {out_path}: {e}", file=sys.stderr)
+    session.close()
+    sys.exit(1)
 
 session.close()
 
