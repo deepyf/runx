@@ -1,182 +1,149 @@
-import requests
+import csv
 import random
 import time
-import datetime
-import csv
-import os
-import subprocess
+from datetime import datetime
+import requests
+from typing import List, Dict, Optional
 import sys
-from math import isfinite
+
 
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6; rv:123.0) Gecko/20100101 Firefox/123.0",
-    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-    "curl/7.88.1",
-    "Wget/1.21.3 (linux-gnu)"
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/119.0',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Edg/118.0.2088.76',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Edg/118.0.2088.76',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 OPR/105.0.0.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 OPR/105.0.0.0'
 ]
 
-PAUSE_RANGES = [(2.0,2.5),(4.0,4.5),(6.0,6.5),(8.0,8.5)]
 
-CURRENCIES = ["USD","GBP","EUR","CAD","CHF"]
-PAIRS = [
-"USD-GBP","USD-EUR","USD-CAD","USD-CHF",
-"GBP-USD","GBP-EUR","GBP-CAD","GBP-CHF",
-"EUR-USD","EUR-GBP","EUR-CAD","EUR-CHF",
-"CAD-USD","CAD-GBP","CAD-EUR","CAD-CHF",
-"CHF-USD","CHF-GBP","CHF-EUR","CHF-CAD"
-]
-
-def choose_headers():
-    ua = random.choice(USER_AGENTS)
+def get_headers() -> Dict[str, str]:
     return {
-        "User-Agent": ua,
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive"
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     }
 
-def fetch_usd_timeseries(start_date, end_date, symbols):
-    session = requests.Session()
-    url = f"https://api.frankfurter.app/{start_date}..{end_date}?base=USD&symbols={','.join(symbols)}"
-    last_exc = None
-    for attempt in range(4):
-        pause = random.uniform(*PAUSE_RANGES[attempt])
-        time.sleep(pause)
-        headers = choose_headers()
-        try:
-            resp = session.get(url, headers=headers, timeout=30)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data
-            else:
-                last_exc = Exception(f"HTTP {resp.status_code}")
-        except Exception as e:
-            last_exc = e
-    raise last_exc
 
-def build_series(data):
-    rates_by_date = data.get("rates", {})
-    all_dates = sorted(rates_by_date.keys())
-    series = {}
-    for date in all_dates:
-        day_rates = rates_by_date.get(date, {})
-        v = {}
-        for c in CURRENCIES:
-            if c == "USD":
-                v["USD"] = 1.0
-            else:
-                val = day_rates.get(c)
-                v[c] = val if isinstance(val, (int,float)) else None
-        series[date] = v
-    return series
+def fetch_exchange_data(pair: str, session: requests.Session, retry: int = 0) -> Optional[Dict]:
+    base, quote = pair.split('-')
+    
+    try:
+        url = f'https://api.exchangerate-api.com/v4/latest/{base}'
+        response = session.get(url, headers=get_headers(), timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if quote not in data.get('rates', {}):
+            return None
+            
+        rate = data['rates'][quote]
+        
+        historical_url = f'https://api.exchangerate-api.com/v4/history/{base}/365'
+        hist_response = session.get(historical_url, headers=get_headers(), timeout=10)
+        hist_response.raise_for_status()
+        hist_data = hist_response.json()
+        
+        rates_list = []
+        if 'rates' in hist_data:
+            for date_str, rates in hist_data['rates'].items():
+                if quote in rates:
+                    rates_list.append(rates[quote])
+        
+        if not rates_list:
+            return {
+                'x': pair,
+                'r': rate,
+                'l': '',
+                'h': ''
+            }
+        
+        week_52_low = min(rates_list)
+        week_52_high = max(rates_list)
+        
+        low_change = ((rate - week_52_low) / week_52_low * 100) if week_52_low else ''
+        high_change = ((rate - week_52_high) / week_52_high * 100) if week_52_high else ''
+        
+        return {
+            'x': pair,
+            'r': rate,
+            'l': low_change if low_change != '' else '',
+            'h': high_change if high_change != '' else ''
+        }
+        
+    except Exception as e:
+        if retry < 3:
+            wait_times = [(4, 4.5), (6, 6.5), (8, 8.5)]
+            wait = random.uniform(*wait_times[retry])
+            time.sleep(wait)
+            return fetch_exchange_data(pair, session, retry + 1)
+        return None
 
-def compute_pair_series(series, a, b):
-    arr = []
-    for date in sorted(series.keys()):
-        v = series[date]
-        a_val = v.get(a)
-        b_val = v.get(b)
-        if a_val is None or b_val is None or a_val == 0:
-            arr.append(None)
-        else:
-            arr.append(b_val / a_val)
-    return arr
-
-def safe_min(values):
-    nums = [v for v in values if isinstance(v,(int,float))]
-    return min(nums) if nums else None
-
-def safe_max(values):
-    nums = [v for v in values if isinstance(v,(int,float))]
-    return max(nums) if nums else None
-
-def format_number(x):
-    if x is None:
-        return ""
-    if not isfinite(x):
-        return ""
-    return f"{x:.6f}"
-
-def format_percent(x):
-    if x is None:
-        return ""
-    if not isfinite(x):
-        return ""
-    return f"{x:.6f}"
 
 def main():
-    today = datetime.date.today()
-    start = today - datetime.timedelta(days=365)
-    start_s = start.isoformat()
-    end_s = today.isoformat()
-    symbols = [c for c in CURRENCIES if c != "USD"]
-    try:
-        data = fetch_usd_timeseries(start_s, end_s, symbols)
-    except Exception:
-        data = {"rates": {}}
-    series = build_series(data)
-    if not series:
-        last_date = datetime.date.today().isoformat()
-    else:
-        last_date = sorted(series.keys())[-1]
-    rows = []
-    for pair in PAIRS:
-        a,b = pair.split("-")
-        pair_series = compute_pair_series(series, a, b)
-        latest = None
-        if pair_series:
-            latest = next((v for v in reversed(pair_series) if isinstance(v,(int,float))), None)
-        low = safe_min(pair_series)
-        high = safe_max(pair_series)
-        if low is None or low == 0 or latest is None:
-            lpercent = ""
+    pairs = [
+        'USD-GBP', 'USD-EUR', 'USD-CAD', 'USD-CHF',
+        'GBP-USD', 'GBP-EUR', 'GBP-CAD', 'GBP-CHF',
+        'EUR-USD', 'EUR-GBP', 'EUR-CAD', 'EUR-CHF',
+        'CAD-USD', 'CAD-GBP', 'CAD-EUR', 'CAD-CHF',
+        'CHF-USD', 'CHF-GBP', 'CHF-EUR', 'CHF-CAD'
+    ]
+    
+    session = requests.Session()
+    results = []
+    
+    processed_bases = {}
+    
+    for i, pair in enumerate(pairs):
+        base = pair.split('-')[0]
+        
+        if base not in processed_bases:
+            data = fetch_exchange_data(pair, session)
+            if data:
+                results.append(data)
+            
+            processed_bases[base] = True
+            
+            if i < len(pairs) - 1:
+                next_base = pairs[i + 1].split('-')[0]
+                if next_base != base:
+                    time.sleep(random.uniform(2, 2.5))
         else:
-            lpercent = format_percent(((latest - low) / low) * 100.0)
-        if high is None or high == 0 or latest is None:
-            hpercent = ""
-        else:
-            hpercent = format_percent(((latest - high) / high) * 100.0)
-        rstr = format_number(latest)
-        dstr = datetime.datetime.now().strftime("%d-%b")
-        rows.append({"x": pair, "r": rstr, "l": lpercent, "h": hpercent, "d": dstr})
-    def sort_key(item):
-        try:
-            return float(item["l"]) if item["l"] != "" else float("-inf")
-        except Exception:
-            return float("-inf")
-    rows_sorted = sorted(rows, key=sort_key, reverse=True)
-    fn = "x.csv"
-    with open(fn, "w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["x","r","l","h","d"])
-        for r in rows_sorted:
-            writer.writerow([r["x"] if r["x"] is not None else "", r["r"] if r["r"] is not None else "", r["l"] if r["l"] is not None else "", r["h"] if r["h"] is not None else "", r["d"] if r["d"] is not None else ""])
-    token = os.environ.get("GITHUB_TOKEN")
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    if token and repo:
-        try:
-            branch = subprocess.check_output(["git","rev-parse","--abbrev-ref","HEAD"]).decode().strip()
-        except Exception:
-            branch = os.environ.get("GITHUB_REF", "").split("/")[-1] or "main"
-        remote = f"https://x-access-token:{token}@github.com/{repo}.git"
-        try:
-            subprocess.run(["git","config","user.name","github-actions[bot]"], check=False)
-            subprocess.run(["git","config","user.email","github-actions[bot]@users.noreply.github.com"], check=False)
-            subprocess.run(["git","add",fn], check=False)
-            subprocess.run(["git","commit","-m","Update x.csv"], check=False)
-            subprocess.run(["git","remote","set-url","origin",remote], check=False)
-            subprocess.run(["git","push","origin",branch], check=False)
-        except Exception:
-            pass
+            for existing in results:
+                if existing['x'].startswith(base + '-'):
+                    data = fetch_exchange_data(pair, session)
+                    if data:
+                        results.append(data)
+                    break
+    
+    results_sorted = sorted(
+        results,
+        key=lambda x: float(x['l']) if x['l'] != '' and x['l'] is not None else float('-inf'),
+        reverse=True
+    )
+    
+    date_str = datetime.now().strftime('%d-%b').lower()
+    
+    for result in results_sorted:
+        result['d'] = date_str
+    
+    with open('x.csv', 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['x', 'r', 'l', 'h', 'd'])
+        writer.writeheader()
+        writer.writerows(results_sorted)
+    
+    print(f"Successfully wrote {len(results_sorted)} exchange rates to x.csv")
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()
-
