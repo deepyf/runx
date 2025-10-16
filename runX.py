@@ -49,7 +49,7 @@ with open("ghOutX", "w", newline="", encoding="utf-8") as fout:
                 else:
                     break
                 time.sleep(wait)
-        R = info.get("currentPrice","") or ""
+        R = info.get("regularMarketPrice","") or ""
         L = info.get("fiftyTwoWeekLowChangePercent","") or ""
         H = info.get("fiftyTwoWeekHighChangePercent","") or ""
         writer.writerow([sym, R, L, H])
