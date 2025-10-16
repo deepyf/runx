@@ -4,6 +4,7 @@ import random
 import datetime
 import csv
 import uuid
+import sys
 USER_AGENTS = [
 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15",
@@ -30,24 +31,28 @@ BASES = ["USD","GBP","EUR","CAD","CHF"]
 def sleep_between(attempt):
     lo,hi = PAUSE_RANGES[min(attempt,len(PAUSE_RANGES)-1)]
     time.sleep(random.uniform(lo,hi))
-def fetch_timeseries(session, base, symbols, start_date, end_date):
+def fetch_timeseries(session, base, symbols, start_date, end_date, timeout=60):
     url = "https://api.exchangerate.host/timeseries"
     params = {"start_date": start_date, "end_date": end_date, "base": base, "symbols": ",".join(symbols)}
     for attempt in range(4):
         ua = random.choice(USER_AGENTS)
         headers = {"User-Agent": ua, "Accept": "application/json", "X-Request-Id": str(uuid.uuid4())}
         try:
-            resp = session.get(url, params=params, headers=headers, timeout=30)
+            resp = session.get(url, params=params, headers=headers, timeout=timeout)
             if resp.status_code == 200:
                 payload = resp.json()
                 rates = payload.get("rates")
                 if isinstance(rates, dict) and rates:
                     return rates
-            raise Exception("bad response")
-        except Exception:
-            if attempt == 3:
-                return None
-            sleep_between(attempt+1)
+                else:
+                    print(f"no rates in payload for base={base} attempt={attempt+1}", file=sys.stderr)
+            else:
+                print(f"HTTP {resp.status_code} for base={base} attempt={attempt+1} body={resp.text[:200]}", file=sys.stderr)
+        except Exception as e:
+            print(f"exception for base={base} attempt={attempt+1} err={e}", file=sys.stderr)
+        if attempt == 3:
+            return None
+        sleep_between(attempt+1)
     return None
 def parse_date(d):
     try:
@@ -62,12 +67,25 @@ def safe_float(v):
 def main():
     today = datetime.date.today()
     end_date = today.isoformat()
-    start_date = (today - datetime.timedelta(days=365)).isoformat()
+    start_date = (today - datetime.timedelta(days=364)).isoformat()
     session = requests.Session()
     timeseries_by_base = {}
     for i,base in enumerate(BASES):
         symbols = [c for c in BASES if c != base]
         rates = fetch_timeseries(session, base, symbols, start_date, end_date)
+        if rates is None:
+            combined = {}
+            for q in symbols:
+                r = fetch_timeseries(session, base, [q], start_date, end_date)
+                if r:
+                    for d,rm in r.items():
+                        combined.setdefault(d,{}).update(rm)
+                sleep_between(0)
+            rates = combined if combined else None
+            if rates:
+                print(f"fallback succeeded for base={base}", file=sys.stderr)
+            else:
+                print(f"all attempts failed for base={base}", file=sys.stderr)
         timeseries_by_base[base] = rates
         sleep_between(0)
     rows = []
@@ -77,7 +95,7 @@ def main():
         r = ""
         l = ""
         h = ""
-        if isinstance(rates, dict):
+        if isinstance(rates, dict) and rates:
             parsed = []
             for d,rate_map in rates.items():
                 dt = parse_date(d)
@@ -111,6 +129,7 @@ def main():
         writer.writerow(["x","r","l","h","d"])
         for row in rows_sorted:
             writer.writerow([row["x"] or "", row["r"] or "", row["l"] or "", row["h"] or "", row["d"] or ""])
+    print("wrote x.csv", file=sys.stderr)
 if __name__ == "__main__":
     main()
 
